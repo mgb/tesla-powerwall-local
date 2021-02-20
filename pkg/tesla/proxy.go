@@ -81,7 +81,7 @@ func (t *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "applicaiton/json")
+	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(data)
 	if err != nil {
 		log.Println(err)
