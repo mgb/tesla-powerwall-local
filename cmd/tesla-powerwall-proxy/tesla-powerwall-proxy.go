@@ -30,7 +30,7 @@ func main() {
 	http.Handle("/api/", g)
 	http.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `Please see <a href="https://github.com/vloschiavo/powerwall2">README.md</a> for API usage. Sample: <a href="/api/metrics/aggregates">/api/metrics/aggregates</a>`)
+		fmt.Fprint(w, `Please see <a href="https://github.com/vloschiavo/powerwall2">README.md</a> for API usage. Sample: <a href="/api/meters/aggregates">/api/meters/aggregates</a> and <a href="/api/system_status/soe">/api/system_status/soe</a>`)
 	})
 	log.Fatal(http.ListenAndServe(*listen, nil))
 }
