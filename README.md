@@ -6,6 +6,7 @@ Since Tesla requires authentication to get statistics about your powerwall on yo
 
 [Install Go](https://golang.org/dl/). Then `go install` the proxy.
 ```
+go get github.com/mgb/tesla-powerwall-local/cmd/tesla-powerwall-proxy
 go install github.com/mgb/tesla-powerwall-local/cmd/tesla-powerwall-proxy
 ```
 
