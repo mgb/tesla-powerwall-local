@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/mgb/tesla-powerwall-local/pkg/tesla"
 	"github.com/spf13/pflag"
@@ -15,13 +16,14 @@ func main() {
 	username := pflag.StringP("username", "u", "", "email address for login")
 	password := pflag.StringP("password", "p", "", "password for login")
 	listen := pflag.StringP("listen", "l", "localhost:8043", "http server address")
+	loginTimeout := pflag.DurationP("login-timeout", "t", 2*time.Minute, "timeout for logging in")
 	pflag.Parse()
 
 	if *host == "" || *username == "" || *password == "" {
 		log.Fatal("host, username, and password flags are required")
 	}
 
-	g := tesla.NewGateway(*host, *username, *password)
+	g := tesla.NewGateway(*host, *username, *password, *loginTimeout)
 	err := g.Login(context.Background())
 	if err != nil {
 		log.Fatalf("failed to login to the server (check your username/password): %s", err.Error())

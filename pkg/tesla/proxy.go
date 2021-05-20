@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -13,8 +14,10 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/avast/retry-go"
+	retry "github.com/avast/retry-go"
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/mgb/tesla-powerwall-local/pkg/retrysync"
 )
 
 func init() {
@@ -24,16 +27,17 @@ func init() {
 }
 
 // NewGateway returns a new Gateway proxy
-func NewGateway(ipAddress, email, password string) *Gateway {
+func NewGateway(ipAddress, email, password string, timeoutDuration time.Duration) *Gateway {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	return &Gateway{
-		ipAddress: ipAddress,
-		email:     email,
-		password:  password,
+		ipAddress:       ipAddress,
+		email:           email,
+		password:        password,
+		timeoutDuration: timeoutDuration,
 
 		client: &http.Client{
 			Jar: jar,
@@ -43,9 +47,12 @@ func NewGateway(ipAddress, email, password string) *Gateway {
 
 // Gateway contains all the information required to proxy the gateway calls
 type Gateway struct {
-	ipAddress string
-	email     string
-	password  string
+	ipAddress       string
+	email           string
+	password        string
+	timeoutDuration time.Duration
+
+	login retrysync.Once
 
 	client *http.Client
 }
@@ -63,8 +70,10 @@ func (t *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		retry.Attempts(2),
 		retry.Context(ctx),
 		retry.RetryIf(func(err error) bool {
-			if err == ErrUnauthorized {
-				t.Login(ctx)
+			if err == ErrUnauthorized || err == context.Canceled {
+				if err := t.Login(ctx); err != nil {
+					return false
+				}
 				return true
 			}
 			return false
@@ -90,8 +99,35 @@ func (t *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Proxied called for %s\n", r.URL.Path)
 }
 
-// Login forces the gatway to login
 func (t *Gateway) Login(ctx context.Context) error {
+	ch := make(chan struct{})
+
+	go func() {
+		log.Printf("Will log in via background process")
+		t.login.Do(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), t.timeoutDuration)
+			defer cancel()
+
+			err := t.runLogin(ctx)
+			if err != nil {
+				log.Printf("Failed to login: %s", err.Error())
+			}
+		})
+		close(ch)
+	}()
+
+	select {
+	case <-ctx.Done():
+		log.Printf("Context failed waiting for login: %s", ctx.Err().Error())
+		return ctx.Err()
+
+	case <-ch:
+		return nil
+	}
+}
+
+// Login forces the gatway to login
+func (t *Gateway) runLogin(ctx context.Context) error {
 	requestBody, err := json.Marshal(struct {
 		Username   string `json:"username"`
 		Email      string `json:"email"`
@@ -111,6 +147,8 @@ func (t *Gateway) Login(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	log.Printf("Attempting to login to: %s", u.String())
 
 	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewBuffer(requestBody))
 	if err != nil {
@@ -142,7 +180,7 @@ func (t *Gateway) Login(ctx context.Context) error {
 	}
 
 	if j.Token == "" {
-		return fmt.Errorf("token missing, unknown response error")
+		return errors.New("token missing, unknown response error")
 	}
 
 	log.Printf("Succesfully logged in with token %q\n", j.Token)
