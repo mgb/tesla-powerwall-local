@@ -80,37 +80,44 @@ func (t *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}),
 	)
 	if err == ErrUnauthorized {
-		log.Println(err)
-		http.Error(w, err.Error(), 403)
+		t.log("%s", err.Error())
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	if ctx.Err() == context.Canceled {
+		// If multiple requests are made, the first one will cancel the context causing this to fail.
+		// Since multiple gateay calls can be made, this is expected, so no need to log anything.
+		http.Error(w, ctx.Err().Error(), http.StatusRequestTimeout)
 		return
 	}
 	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), 400)
+		t.log("%s", err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(data)
 	if err != nil {
-		log.Println(err)
+		t.log("%s", err.Error())
 	}
+	w.WriteHeader(http.StatusOK)
 
-	log.Printf("Proxied called for %s\n", r.URL.Path)
+	t.log("Proxied called for %s", r.URL.Path)
 }
 
 func (t *Gateway) Login(ctx context.Context) error {
 	ch := make(chan struct{})
 
 	go func() {
-		log.Printf("Will log in via background process")
+		t.log("Will log in via background process")
 		t.login.Do(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), t.timeoutDuration)
 			defer cancel()
 
 			err := t.runLogin(ctx)
 			if err != nil {
-				log.Printf("Failed to login: %s", err.Error())
+				t.log("Failed to login: %s", err.Error())
 			}
 		})
 		close(ch)
@@ -118,7 +125,7 @@ func (t *Gateway) Login(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		log.Printf("Context failed waiting for login: %s", ctx.Err().Error())
+		t.log("Context failed waiting for login: %s", ctx.Err().Error())
 		return ctx.Err()
 
 	case <-ch:
@@ -148,7 +155,7 @@ func (t *Gateway) runLogin(ctx context.Context) error {
 		return err
 	}
 
-	log.Printf("Attempting to login to: %s", u.String())
+	t.log("Attempting to login to: %s", u.String())
 
 	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewBuffer(requestBody))
 	if err != nil {
@@ -183,7 +190,7 @@ func (t *Gateway) runLogin(ctx context.Context) error {
 		return errors.New("token missing, unknown response error")
 	}
 
-	log.Printf("Succesfully logged in with token %q\n", j.Token)
+	t.log("Succesfully logged in with token %q", j.Token)
 	return nil
 }
 
@@ -211,6 +218,10 @@ func (t *Gateway) ProxyCall(ctx context.Context, path *url.URL) ([]byte, error) 
 	}
 
 	return data, checkForError(data).getError()
+}
+
+func (t *Gateway) log(fmt string, args ...interface{}) {
+	log.Printf("[%s] "+fmt, append([]interface{}{t.ipAddress}, args...)...)
 }
 
 func (t *Gateway) convertToTeslaPath(path *url.URL) (*url.URL, error) {

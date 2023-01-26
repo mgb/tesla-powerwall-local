@@ -53,3 +53,11 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+
+## Multiple Powerwall hostnames
+
+If your Powerwall is connected to your home network as well as your machine is connected to the Powerwall's wifi network, you can have the proxy attempt both (or more) hostnames to try and retrieve the data. This is useful in situations where the Powerwall may disconnect from your home network but its Wifi network is still working. To do this, add the IP address of the Powerwall as another `-h` in your configuration.
+
+```
+ExecStart=/home/pi/go/bin/tesla-powerwall-proxy -h 192.168.91.1 -h 192.168.0.7 -u YOUR@EMAIL.HERE -p PASSWORD -l=:8043
+```
