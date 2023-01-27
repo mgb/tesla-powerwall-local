@@ -10,11 +10,13 @@ import (
 )
 
 func TestOnce_noReset(t *testing.T) {
+	t.Parallel()
+
 	var o Once
 	var i int64
 
 	f := func() {
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 		atomic.AddInt64(&i, 1)
 	}
 
@@ -34,11 +36,13 @@ func TestOnce_noReset(t *testing.T) {
 }
 
 func TestOnce_multipleResets(t *testing.T) {
+	t.Parallel()
+
 	var o Once
 	var i int64
 
 	f := func() {
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 		atomic.AddInt64(&i, 1)
 	}
 
